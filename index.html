@@ -1,0 +1,29 @@
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0288d1">
+
+<script>
+  // 註冊 Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+
+  // 升級版：加入資料持久化 (localStorage)
+  function updateUI() {
+      const percent = (current / goal) * 100;
+      document.getElementById('currentAmount').innerText = current;
+      document.getElementById('percentage').innerText = Math.floor(percent) + '%';
+      document.getElementById('waterFill').style.height = percent + '%';
+      
+      // 將目前進度存入手機記憶體
+      localStorage.setItem('water_today', current);
+  }
+
+  // 網頁開啟時，自動讀取上次紀錄
+  window.onload = () => {
+      const saved = localStorage.getItem('water_today');
+      if (saved) {
+          current = parseInt(saved);
+          updateUI();
+      }
+  };
+</script>
