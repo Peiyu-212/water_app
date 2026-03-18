@@ -1,29 +1,228 @@
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0288d1">
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>水滴助手</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3105/3105807.png">
+    <link rel="manifest" href="manifest.json">
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root { --primary: #00d2ff; --secondary: #3a7bd5; --bg: #f0f4f8; --success: #4caf50; }
+        body { 
+            margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); display: flex; justify-content: center; align-items: center; height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px);
+            padding: 30px; border-radius: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 85%; max-width: 350px; text-align: center;
+            transition: border 0.3s;
+            border: 4px solid transparent; /* 預留達成目標時的邊框 */
+        }
+        
+        /* 達成目標時的樣式 */
+        .container.goal-reached {
+            border-color: var(--success);
+        }
+
+        h2 { color: #444; margin-bottom: 5px; transition: color 0.3s; }
+        .container.goal-reached h2 { color: var(--success); }
+
+        .target-text { font-size: 0.9rem; color: #888; margin-bottom: 25px; }
+
+        /* 波浪容器 */
+        .cup {
+            width: 160px; height: 160px; border-radius: 50%; border: 5px solid #fff;
+            margin: 0 auto 30px; position: relative; overflow: hidden;
+            background: #fff; box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+        }
+        .wave {
+            position: absolute; bottom: 0; left: 0; width: 200%; height: 0%;
+            background: linear-gradient(to top, var(--secondary), var(--primary));
+            transition: height 0.8s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+            border-radius: 35%;
+        }
+        .container.goal-reached .wave {
+            background: linear-gradient(to top, #66bb6a, var(--success)); /* 變更顏色為綠色 */
+        }
+
+        .wave::before {
+            content: ""; position: absolute; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.3); top: -5%; left: 0; border-radius: 35%;
+            animation: rotate 5s linear infinite;
+        }
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .percentage {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 1.8rem; font-weight: 800; color: #333; z-index: 10;
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white; border: none; padding: 15px 35px; border-radius: 50px;
+            font-size: 1.1rem; font-weight: 600; cursor: pointer;
+            box-shadow: 0 10px 20px rgba(58, 123, 213, 0.3);
+            transition: all 0.2s; -webkit-tap-highlight-color: transparent;
+        }
+        button:active { transform: scale(0.95); }
+        button:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="mainContainer">
+    <h2 id="titleText">今日飲水</h2>
+    <div class="target-text">目標: <span id="goalText">2200</span> ml</div>
+    
+    <div class="cup">
+        <div id="waterWave" class="wave"></div>
+        <div id="percentText" class="percentage">0%</div>
+    </div>
+
+    <p style="font-weight: bold; color: #555;"><span id="curText">0</span> ml</p>
+    <button onclick="addWater(250)" id="drinkBtn">喝一杯水</button>
+    <p id="congratsText" style="display:none; color: var(--success); font-weight:bold; margin-top:15px;">🎉 恭喜！今日目標達成！</p>
+</div>
 
 <script>
-  // 註冊 Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
+    let current = 0;
+    const goal = 2200;
+    let isGoalCelebrated = false; // 防止重複灑花
 
-  // 升級版：加入資料持久化 (localStorage)
-  function updateUI() {
-      const percent = (current / goal) * 100;
-      document.getElementById('currentAmount').innerText = current;
-      document.getElementById('percentage').innerText = Math.floor(percent) + '%';
-      document.getElementById('waterFill').style.height = percent + '%';
-      
-      // 將目前進度存入手機記憶體
-      localStorage.setItem('water_today', current);
-  }
+    function getToday() { return new Date().toISOString().split('T')[0]; }
 
-  // 網頁開啟時，自動讀取上次紀錄
-  window.onload = () => {
-      const saved = localStorage.getItem('water_today');
-      if (saved) {
-          current = parseInt(saved);
-          updateUI();
-      }
-  };
+    // 初始化 Confetti (選擇一個適合手機的預設值)
+    const defaults = {
+        spread: 360,
+        ticks: 100,
+        gravity: 1,
+        decay: 0.94,
+        startVelocity: 30,
+        shapes: ['circle', 'square'],
+        colors: ['#29b6f6', '#0288d1', '#ffd700', '#ff5722']
+    };
+
+    // 特效 1: 灑花 (兩側射出)
+    function fireConfetti() {
+        confetti({ ...defaults, particleCount: 40, scalar: 1.2, angle: 60, origin: { x: 0, y: 1 } });
+        confetti({ ...defaults, particleCount: 40, scalar: 1.2, angle: 120, origin: { x: 1, y: 1 } });
+    }
+
+    // 特效 2: 煙火炸裂 (在畫面上方炸開)
+    function fireFireworks() {
+        const duration = 3 * 1000; // 持續 3 秒
+        const animationEnd = Date.now() + duration;
+
+        const interval = setInterval(function() {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) return clearInterval(interval);
+
+            const particleCount = 50 * (timeLeft / duration);
+            // 隨機在不同的地方炸開
+            confetti(Object.assign({}, defaults, { 
+                particleCount, 
+                origin: { x: Math.random(), y: Math.random() - 0.2 },
+                gravity: 0.8,
+                scalar: 1.3
+            }));
+        }, 250);
+    }
+
+    function celebrate() {
+        if (isGoalCelebrated) return;
+        isGoalCelebrated = true;
+
+        // 啟動灑花和煙火
+        fireConfetti();
+        setTimeout(fireFireworks, 500); // 延遲半秒後炸煙火
+
+        // 更新 UI 為「達成模式」
+        const container = document.getElementById('mainContainer');
+        const btn = document.getElementById('drinkBtn');
+        const congrats = document.getElementById('congratsText');
+        
+        container.classList.add('goal-reached');
+        btn.innerText = "明日待續";
+        btn.disabled = true; // 停用按鈕
+        congrats.style.display = 'block';
+
+        // 存儲今日已慶祝的狀態
+        localStorage.setItem('goal_celebrated_' + getToday(), 'true');
+    }
+
+    function updateUI() {
+        const percent = Math.min((current / goal) * 100, 100);
+        document.getElementById('curText').innerText = current;
+        document.getElementById('percentText').innerText = Math.floor(percent) + '%';
+        document.getElementById('waterWave').style.height = percent + '%';
+        localStorage.setItem('water_today', current);
+
+        // 檢查是否達成目標
+        if (current >= goal) {
+            celebrate();
+        }
+    }
+
+    function addWater(ml) {
+        // 防止達成目標後還能加水
+        if (current >= goal) return;
+        current = Math.min(current + ml, goal);
+        updateUI();
+    }
+
+    window.onload = () => {
+        const today = getToday();
+        const savedDate = localStorage.getItem('water_date');
+        
+        if (savedDate !== today) {
+            // 跨日重設
+            current = 0;
+            isGoalCelebrated = false;
+            localStorage.setItem('water_date', today);
+            localStorage.removeItem('water_today');
+            // 清除昨天的慶祝狀態，但保險起見，我們用日期鎖定 localStorage
+        } else {
+            // 同一天，讀取紀錄
+            current = parseInt(localStorage.getItem('water_today') || 0);
+            isGoalCelebrated = localStorage.getItem('goal_celebrated_' + today) === 'true';
+        }
+
+        // 初始化 UI (如果不需慶祝，就普通更新)
+        const percent = Math.min((current / goal) * 100, 100);
+        document.getElementById('curText').innerText = current;
+        document.getElementById('percentText').innerText = Math.floor(percent) + '%';
+        document.getElementById('waterWave').style.height = percent + '%';
+
+        if (current >= goal) {
+            // 如果達成目標但還沒慶祝（例如剛打開 App），就進行慶祝
+            if (!isGoalCelebrated) {
+                celebrate();
+            } else {
+                // 如果已經慶祝過了，只更新為達成模式的 UI，不再灑花
+                const container = document.getElementById('mainContainer');
+                const btn = document.getElementById('drinkBtn');
+                const congrats = document.getElementById('congratsText');
+                container.classList.add('goal-reached');
+                btn.innerText = "明日待續";
+                btn.disabled = true;
+                congrats.style.display = 'block';
+            }
+        }
+
+        // 註冊 Service Worker (確保 HTTPS 下運作)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log(err));
+        }
+    };
 </script>
+
+</body>
+</html>
