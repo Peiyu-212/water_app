@@ -89,6 +89,11 @@
 
     <p style="font-weight: bold; color: #555;"><span id="curText">0</span> ml</p>
     <button onclick="addWater(250)" id="drinkBtn">喝一杯水</button>
+    <div style="margin-top: 25px;">
+        <span onclick="manualReset()" style="font-size: 0.8rem; color: #bbb; cursor: pointer; text-decoration: underline;">
+            重設今日進度
+        </span>
+    </div>
     <p id="congratsText" style="display:none; color: var(--success); font-weight:bold; margin-top:15px;">🎉 恭喜！今日目標達成！</p>
 </div>
 
@@ -176,6 +181,31 @@
         if (current >= goal) return;
         current = Math.min(current + ml, goal);
         updateUI();
+    }
+
+    function manualReset() {
+        if (confirm("確定要清空今天的飲水紀錄嗎？")) {
+            current = 0;
+            isGoalCelebrated = false;
+            
+            // 清除所有相關的 LocalStorage
+            const today = getToday();
+            localStorage.setItem('water_today', '0');
+            localStorage.setItem('goal_celebrated_' + today, 'false');
+            
+            // 恢復 UI 狀態
+            const container = document.getElementById('mainContainer');
+            const btn = document.getElementById('drinkBtn');
+            const congrats = document.getElementById('congratsText');
+            
+            container.classList.remove('goal-reached');
+            btn.innerText = "喝一杯水";
+            btn.disabled = false;
+            congrats.style.display = 'none';
+            
+            updateUI();
+            alert("已重設進度！");
+        }
     }
 
     window.onload = () => {
